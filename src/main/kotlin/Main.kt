@@ -1,15 +1,17 @@
 package dev.bltucker
 
-import org.jetbrains.exposed.dao.id.EntityID
-import org.jetbrains.exposed.dao.id.IntIdTable
+import kotlinx.datetime.Clock
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.Query
 import org.jetbrains.exposed.sql.SchemaUtils
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
-import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import java.math.BigDecimal
 
 
 fun main() {
@@ -19,56 +21,76 @@ fun main() {
 
     transaction {
         addLogger(StdOutSqlLogger)
-        SchemaUtils.create(Genres)
+        // Create tables
+        SchemaUtils.create(Books, Authors, Genres, Users, UserBooks)
 
-        //CREATE
-        val fantasyGenreId = Genres.insert {
+
+        val fantasyId = Genres.insert {
             it[name] = "Fantasy"
-            it[description] = "Magic, Sorcery, Elves and Stuff"
+            it[description] = "Fantasy literature"
         } get Genres.id
 
-        //Note the lack of a description here. We allow it to be nullable so that's ok!
-        val scienceFictionGenreId = Genres.insert {
-            it[name] = "Science Fiction"
-        } get Genres.id
+        val authorId = Authors.insert {
+            it[name] = "J.R.R. Tolkien"
+            it[biography] = "English writer and philologist"
+        } get Authors.id
 
-        println("Inserted Fantasy with ID: $fantasyGenreId")
-        println("Inserted Science Fiction with ID: $scienceFictionGenreId")
+        val bookId = Books.insert {
+            it[title] = "The Lord of the Rings"
+            it[isbn] = "9780618640157"
+            it[price] = BigDecimal("29.99")
+            it[publishDate] = LocalDate(1954, 7, 29)
+            it[this.authorId] = authorId
+            it[genreId] = fantasyId
+        } get Books.id
 
-        //READ
-        val allGenres: Query = Genres.selectAll()
+        val userId = Users.insert {
+            it[username] = "bookworm"
+            it[email] = "bookworm@example.com"
+            it[registrationDate] = getCurrentDate()
+        } get Users.id
 
-        allGenres.forEach{
-            println("${it[Genres.id]}: ${it[Genres.name]} - ${it[Genres.description]}")
+        UserBooks.insert {
+            it[this.userId] = userId
+            it[this.bookId] = bookId
+            it[purchaseDate] = getCurrentDate()
         }
 
-        val fantasy = Genres.select(Genres.name, Genres.description).where { Genres.name eq "Fantasy" }.single()
-        println("Fantasy genre: ${fantasy[Genres.name]} - ${fantasy[Genres.description]}")
+        //Get all books with their authors and genres
+        val booksWithDetails = (Books innerJoin Authors innerJoin Genres)
+            .select(Books.title, Authors.name, Genres.name, Books.price)
 
 
-        //UPDATE
-        Genres.update({ Genres.id eq scienceFictionGenreId }) {
-            it[description] = "A genre of speculative fiction dealing with imaginative and futuristic concepts"
+        println("Books with details:")
+        booksWithDetails.forEach {
+            println("${it[Books.title]} by ${it[Authors.name]} (${it[Genres.name]}) - $${it[Books.price]}")
         }
 
-        val updatedSciFi = Genres.select(Genres.name, Genres.description).where { Genres.id eq scienceFictionGenreId }.single()
-        println("Updated Sci-Fi: ${updatedSciFi[Genres.name]} - ${updatedSciFi[Genres.description]}")
+        //Find all books purchased by a specific user
+        val userPurchases = (UserBooks innerJoin Books innerJoin Users)
+            .select(Users.username, Books.title, UserBooks.purchaseDate)
+            .where { Users.id eq userId }
 
+        println("\nBooks purchased by user:")
+        userPurchases.forEach {
+            println("${it[Users.username]} bought ${it[Books.title]} on ${it[UserBooks.purchaseDate]}")
+        }
 
-        //DELETE
-        val knitting: EntityID<Int> = Genres.insert {
-            it[name] = "Cyberpunk Knitting"
-            it[description] = "A genre doomed to never catch on"
-        } get Genres.id
+        //Get average book price
+        val avgPrice = Books.select(Books.price.avg()).single()[Books.price.avg()]
+        println("\nAverage book price: $${avgPrice?.setScale(2)}")
 
-        val genreCountBefore = Genres.selectAll().count()
-        println("There are $genreCountBefore genres")
+        //Delete a user (cascading delete will remove their purchases)
+        Users.deleteWhere { Users.id eq userId }
 
-        Genres.deleteWhere { Genres.id eq knitting }
+        val remainingUsers = Users.selectAll().count()
+        println("\nRemaining users after deletion: $remainingUsers")
 
-        val genreCountAfter = Genres.selectAll().count()
-        println("There are $genreCountAfter genres")
 
     }
+}
 
+
+private fun getCurrentDate(): LocalDate {
+    return Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
 }
