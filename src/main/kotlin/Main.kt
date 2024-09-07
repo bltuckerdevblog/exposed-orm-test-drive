@@ -11,10 +11,6 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 
-object Genres : IntIdTable(){
-    val name = varchar("name", 255).uniqueIndex()
-    val description = varchar("description", 255).nullable()
-}
 
 fun main() {
     println("Hello Exposed!")
