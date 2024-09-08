@@ -11,6 +11,7 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
+import java.awt.print.Book
 import java.math.BigDecimal
 
 
@@ -42,51 +43,17 @@ fun main() {
             it[publishDate] = LocalDate(1954, 7, 29)
             it[this.authorId] = authorId
             it[genreId] = fantasyId
+            it[metadata] = BookMetadata(
+                tags = listOf("awesome", "classic"),
+                editions = listOf(),
+                translations = listOf()
+            )
         } get Books.id
 
-        val userId = Users.insert {
-            it[username] = "bookworm"
-            it[email] = "bookworm@example.com"
-            it[registrationDate] = getCurrentDate()
-        } get Users.id
+        val book = Books.selectAll().where { Books.id eq bookId }.single()
+        val metaData = book[Books.metadata]
 
-        UserBooks.insert {
-            it[this.userId] = userId
-            it[this.bookId] = bookId
-            it[purchaseDate] = getCurrentDate()
-        }
-
-        //Get all books with their authors and genres
-        val booksWithDetails = (Books innerJoin Authors innerJoin Genres)
-            .select(Books.title, Authors.name, Genres.name, Books.price)
-
-
-        println("Books with details:")
-        booksWithDetails.forEach {
-            println("${it[Books.title]} by ${it[Authors.name]} (${it[Genres.name]}) - $${it[Books.price]}")
-        }
-
-        //Find all books purchased by a specific user
-        val userPurchases = (UserBooks innerJoin Books innerJoin Users)
-            .select(Users.username, Books.title, UserBooks.purchaseDate)
-            .where { Users.id eq userId }
-
-        println("\nBooks purchased by user:")
-        userPurchases.forEach {
-            println("${it[Users.username]} bought ${it[Books.title]} on ${it[UserBooks.purchaseDate]}")
-        }
-
-        //Get average book price
-        val avgPrice = Books.select(Books.price.avg()).single()[Books.price.avg()]
-        println("\nAverage book price: $${avgPrice?.setScale(2)}")
-
-        //Delete a user (cascading delete will remove their purchases)
-        Users.deleteWhere { Users.id eq userId }
-
-        val remainingUsers = Users.selectAll().count()
-        println("\nRemaining users after deletion: $remainingUsers")
-
-
+        println("Book Meta Data: $metaData")
     }
 }
 

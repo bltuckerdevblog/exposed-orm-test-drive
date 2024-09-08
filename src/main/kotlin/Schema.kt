@@ -3,6 +3,14 @@ package dev.bltucker
 import org.jetbrains.exposed.dao.id.IntIdTable
 import org.jetbrains.exposed.sql.ReferenceOption
 import org.jetbrains.exposed.sql.kotlin.datetime.date
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import org.jetbrains.exposed.sql.json.json
+
+
+val format = Json { prettyPrint = true }
+@Serializable
+data class BookMetadata(val tags: List<String>, val editions: List<String>, val translations: List<String>)
 
 object Books : IntIdTable() {
     val title = varchar("title", 255)
@@ -11,6 +19,7 @@ object Books : IntIdTable() {
     val publishDate = date("publish_date")
     val authorId = reference("author_id", Authors)
     val genreId = reference("genre_id", Genres)
+    val metadata = json<BookMetadata>("metadata", format)
 }
 
 object Authors : IntIdTable() {
